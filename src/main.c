@@ -11,6 +11,8 @@
 #define cons "-c"
 #define nbthread "-t"
 
+uint32_t tab[N];
+
 int main(int argc, char *argv[]) {
   int consonne = 1;
   int maxThread = 1;
@@ -66,18 +68,25 @@ int main(int argc, char *argv[]) {
 
 //lit un des fichiers donné en arguments et les sépare en groupe de 32 bytes
 //qu il met dans le buffer de taille "N"
-void producteur(void){
-  int item;
-  while(true){
-    item = produce(item);
+int producteur(char *fileName){
+  int fileReader = open(fileName, O_RDONLY);
+  if(fileReader==-1){
+    return -1;  //gerer dans le main en cas d errreur
+  }
+  size_t taille = sizeof(uint32_t);
+  uint32_t item ;
+  while(true && read!=0){
+    int read = read(fileReader,(void*)&item,taille);
+    if(read==-1){
+      return -2; //gerer dans le main en cas d erreur
+    }
     sem_wait(&empty);  // attente d'un slot libre
     pthread_mutex_lock(&mutex);  // section critique
-    insert_item();
+    insert_item(item);
     pthread_mutex_unlock(&mutex);
     sem_post(&full);  // il y a un slot rempli en plus
   }
 }
-
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
 void consommateur(void){
   int item;
@@ -88,4 +97,22 @@ void consommateur(void){
     pthread_mutex_unlock(&mutex);
     sem_post(&empty);// il y a un slot libre en plus
   }
-}
+  }
+void insert_item(uint32_t ajout){
+    for(int i=0; i<N; i++){
+      if(*(tab+i)==NULL){
+        *(tab+i)=ajout;
+      }
+    }
+  }
+
+uint32_t remove(){
+    for(int i=0; i<N; i++){
+      if(*(tab+i+1)==NULL){
+        uint32_t item = *(tab+i);
+        *(tab+i)=NULL;
+        return item;
+      }
+    }
+    return NULL;
+  }
