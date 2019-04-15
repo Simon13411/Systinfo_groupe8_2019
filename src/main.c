@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdint.h>
 //#include <reverse.h>
 //#include <sha256.h>
 // Initialisation
@@ -63,8 +64,9 @@ int main(int argc, char *argv[]) {
 }
 
 
-// Producteur
-void producer(void){
+//lit un des fichiers donné en arguments et les sépare en groupe de 32 bytes
+//qu il met dans le buffer de taille "N"
+void producteur(void){
   int item;
   while(true){
     item = produce(item);
@@ -73,5 +75,17 @@ void producer(void){
     insert_item();
     pthread_mutex_unlock(&mutex);
     sem_post(&full);  // il y a un slot rempli en plus
+  }
+}
+
+//il s'agit des thread qui vont prendre les 32 bytes et les décripter
+void consommateur(void){
+  int item;
+  while(true){
+    sem_wait(&full);// attente d'un slot rempli
+    pthread_mutex_lock(&mutex);// section critique
+    item=remove(item);
+    pthread_mutex_unlock(&mutex);
+    sem_post(&empty);// il y a un slot libre en plus
   }
 }
