@@ -60,9 +60,6 @@ int main(int argc, char *argv[]) {
   pthread_mutex_init(&mutex, NULL);
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
-
-
-
 }
 
 
@@ -71,14 +68,21 @@ int main(int argc, char *argv[]) {
 int producteur(char *fileName){
   int fileReader = open(fileName, O_RDONLY);
   if(fileReader==-1){
-    return -1;  //gerer dans le main en cas d errreur
+    return -1;  //gerer dans le main en cas d errreur -1 probleme dopen
   }
   size_t taille = sizeof(uint32_t);
   uint32_t item ;
-  while(true && read!=0){
+  while(true && read>0){
     int read = read(fileReader,(void*)&item,taille);
     if(read==-1){
-      return -2; //gerer dans le main en cas d erreur
+      return -2; //gerer dans le main en cas d erreur -2 probleme de read
+    }
+    if(read==0){
+      int fermer = close(fileName);
+      if(fermer==-1){
+        return -3 //gerer dans le main en cas d erreur -3 probleme de close
+      }
+      return 0; // tout est ok tout c est passe correctement
     }
     sem_wait(&empty);  // attente d'un slot libre
     pthread_mutex_lock(&mutex);  // section critique
@@ -86,7 +90,18 @@ int producteur(char *fileName){
     pthread_mutex_unlock(&mutex);
     sem_post(&full);  // il y a un slot rempli en plus
   }
+  return 1; // gros souci car pas cense rentret dedans
 }
+
+void insert_item(uint32_t ajout){  //ajout d un bloc de 32 bit dans le buffer tab
+    for(int i=0; i<N; i++){
+      if(*(tab+i)==NULL){
+        *(tab+i)=ajout;
+      }
+    }
+  }
+
+
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
 void consommateur(void){
   int item;
@@ -98,15 +113,8 @@ void consommateur(void){
     sem_post(&empty);// il y a un slot libre en plus
   }
   }
-void insert_item(uint32_t ajout){
-    for(int i=0; i<N; i++){
-      if(*(tab+i)==NULL){
-        *(tab+i)=ajout;
-      }
-    }
-  }
 
-uint32_t remove(){
+uint32_t remove(){ // retire le dernier du buffer tab
     for(int i=0; i<N; i++){
       if(*(tab+i+1)==NULL){
         uint32_t item = *(tab+i);
