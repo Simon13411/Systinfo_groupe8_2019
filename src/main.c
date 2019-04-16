@@ -4,25 +4,36 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 //#include <reverse.h>
 //#include <sha256.h>
 // Initialisation
 #define N 10 // slots du buffer
 #define cons "-c"
 #define nbthread "-t"
-#define Fini 0
+int Fini =0;
 pthread_mutex_t mutex;
 pthread_mutex_t FiniMutex;
+pthread_mutex_t place;
 sem_t empty;
 sem_t full;
-uint32_t tab[N];
+uint8_t tab[N]={};
+int nbfiles;
+int placetab=0;
+
+
+
+
 
 int main(int argc, char *argv[]) {
   int consonne = 1;
   int maxThread = 1;
   char *files[argc];
   int test=0;
-  int nbFiles = argc-1;
+  nbfiles = argc-1;
   printf("argc=%d\n",argc);
   for(int i=1;i<argc; i++){
     printf("i=%d\n",i);
@@ -33,7 +44,7 @@ int main(int argc, char *argv[]) {
     else if(strcmp(*(argv+i),nbthread)==0){  //regarde le nombre de threads utilise
       i++;
       if ((atoi(*(argv+i)))>1){
-        nbFiles--;
+        nbfiles--;
         printf("maxthread if\n");
         maxThread = atoi(*(argv+i));
         printf("nombre de threads = %d\n", maxThread);
@@ -49,13 +60,13 @@ int main(int argc, char *argv[]) {
   printf("nombre de threads = %d\n",maxThread );
   if (test==1){
     printf("contient nbthreads\n");
-    nbFiles--;
+    nbfiles--;
   }
   if (consonne==0){
     printf("contient consonne\n");
-    nbFiles--;
+    nbfiles--;
   }
-  printf("longuer fichier = %d\n",nbFiles );
+  printf("longuer fichier = %d\n",nbfiles );
 
 
 
@@ -64,82 +75,90 @@ int main(int argc, char *argv[]) {
   sem_init(&full,0,0);  // buffer vide
 }
 
-void insert_item(uint32_t ajout){  //ajout d un bloc de 32 bit dans le buffer tab
-    for(int i=0; i<N; i++){
-      if(*(tab+i)==NULL){
-        *(tab+i)=ajout;
-      }
-    }
-  }
+void insert_item(uint8_t ajout){  //ajout d un bloc de 32 bit dans le buffer tab
+  *(tab+placetab)=ajout;
+  pthread_mutex_lock(&place);
+  placetab++;
+  pthread_mutex_unlock(&place);
+}
 
 //lit un des fichiers donné en arguments et les sépare en groupe de 32 bytes
 //qu il met dans le buffer de taille "N"
 int producteur(char *fileName){
-  int fileReader = open(fileName, O_RDONLY);
+  int fileReader =open(fileName,O_RDONLY);
   if(fileReader==-1){
     pthread_mutex_lock(&FiniMutex);  // section critique
     Fini++;
     pthread_mutex_unlock(&FiniMutex);
     return -1;  //gerer dans le main en cas d errreur -1 probleme dopen
   }
-  size_t taille = sizeof(uint32_t);
-  uint32_t item ;
-  int read=1;
-  while(read>0){
-    read = read(fileReader,(void*)&item,taille);
-    if(read==-1){
-      pthread_mutex_lock(&FiniMutex);  // section critique
-      Fini++;
-      pthread_mutex_unlock(&FiniMutex);
-      return -2; //gerer dans le main en cas d erreur -2 probleme de read
-    }
-    if(read==0){
-      int fermer = close(fileName);
-      if(fermer==-1){
+  size_t taille = sizeof(uint8_t);
+  uint8_t item[32];
+  int read1=1;
+  while(read1>0){
+    for(int j=0;j<32;j++){
+      uint8_t byte;
+      read1 = read(fileReader,(void*)&byte,taille);
+      if(read1==-1){
         pthread_mutex_lock(&FiniMutex);  // section critique
         Fini++;
         pthread_mutex_unlock(&FiniMutex);
-        return -3 //gerer dans le main en cas d erreur -3 probleme de close
+        return -2; //gerer dans le main en cas d erreur -2 probleme de read
       }
-      pthread_mutex_lock(&FiniMutex);  // section critique
-      Fini++;
-      pthread_mutex_unlock(&FiniMutex);
-      return 0; // tout est ok tout c est passe correctement
-    }
-    sem_wait(&empty);  // attente d'un slot libre
-    pthread_mutex_lock(&mutex);  // section critique
-    insert_item(item);
-    pthread_mutex_unlock(&mutex);
-    sem_post(&full);  // il y a un slot rempli en plus
+      if(read1==0){ // fin du fichier
+        int fermer = close(fileReader);
+        if(fermer==-1){
+          pthread_mutex_lock(&FiniMutex);  // section critique
+          Fini++;
+          pthread_mutex_unlock(&FiniMutex);
+          return -3; //gerer dans le main en cas d erreur -3 probleme de close
+        }
+        pthread_mutex_lock(&FiniMutex);  // section critique
+        Fini++;
+        pthread_mutex_unlock(&FiniMutex);
+        return -4; // moins 32 bytes
+      }
+    *(item+j)=byte;
   }
+  sem_wait(&empty);  // attente d'un slot libre
+  pthread_mutex_lock(&mutex);  // section critique
+  insert_item(item);
+  pthread_mutex_unlock(&mutex);
+  sem_post(&full);  // il y a un slot rempli en plus
+ }
+ int fermer = close(fileReader);
+ if(fermer==-1){
   pthread_mutex_lock(&FiniMutex);  // section critique
   Fini++;
   pthread_mutex_unlock(&FiniMutex);
-  return 1; // gros souci car pas cense rentret dedans
+  return -3;
+ }
+ pthread_mutex_lock(&FiniMutex);  // section critique
+ Fini++;
+ pthread_mutex_unlock(&FiniMutex);
+ return 0; // tout est ok tout c est passe correctement
 }
 
 
-uint32_t remove(){ // retire le dernier du buffer tab
-    for(int i=0; i<N; i++){
-      if(*(tab+i+1)==NULL){
-        uint32_t item = *(tab+i);
-        *(tab+i)=NULL;
-        return item;
-      }
-    }
-    return NULL;
-  }
+
+uint8_t remplacer(){ // retire le dernier du buffer tab
+  pthread_mutex_lock(&place);
+  placetab--;
+  pthread_mutex_unlock(&place);
+  return *(tab+placetab);
+}
+
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
-void consommateur(void){
-  uint32_t item;
-  int nbFini
+void consommateur(){
+  uint8_t item;
+  int nbFini;
   pthread_mutex_lock(&FiniMutex);  // section critique
   nbFini=Fini;
   pthread_mutex_unlock(&FiniMutex);
-  while(nbFini==nbFiles){
+  while(nbFini==nbfiles){
     sem_wait(&full);// attente d'un slot rempli
     pthread_mutex_lock(&mutex);// section critique
-    item=remove();
+    item=remplacer();
     pthread_mutex_unlock(&mutex);
     sem_post(&empty);// il y a un slot libre en plus
 
