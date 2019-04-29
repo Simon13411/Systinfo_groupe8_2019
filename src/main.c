@@ -8,8 +8,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-//#include <reverse.h>
-//#include <sha256.h>
+#include "./reverse.h"
+#include "./reverse.c"
 // Initialisation
 #define N 10 // slots du buffer
 #define cons "-c"
@@ -32,25 +32,26 @@ int main(int argc, char *argv[]) {
   int consonne = 1;
   int maxThread = 1;
   char *files[argc];
-  int test=0;
+  int testthread=0;
   nbfiles = argc-1;
   printf("argc=%d\n",argc);
   for(int i=1;i<argc; i++){
     printf("i=%d\n",i);
     if(strcmp(*(argv+i),cons)==0){  //regarde si on demande de verifier pour les consonnes(==true) ou les voyelle(==false)
       consonne = 0;
+      nbfiles--;
       printf("consonne = %d\n",consonne );
     }
     else if(strcmp(*(argv+i),nbthread)==0){  //regarde le nombre de threads utilise
       i++;
       if ((atoi(*(argv+i)))>1){
         nbfiles--;
-        printf("maxthread if\n");
         maxThread = atoi(*(argv+i));
         printf("nombre de threads = %d\n", maxThread);
       }
       printf("thread<1\n");
-      test=1;
+      nbfiles--;
+      testthread=1;
     }//si pas -c ou -t alors c'est un fichier
     else{ //ecrit dans un tableau le nom des fichiers
     *(files+i) = *(argv+i);
@@ -58,13 +59,11 @@ int main(int argc, char *argv[]) {
     }
   }
   printf("nombre de threads = %d\n",maxThread );
-  if (test==1){
+  if (testthread==1){
     printf("contient nbthreads\n");
-    nbfiles--;
   }
   if (consonne==0){
     printf("contient consonne\n");
-    nbfiles--;
   }
   printf("longuer fichier = %d\n",nbfiles );
 
@@ -93,12 +92,12 @@ int producteur(char *fileName){
     return -1;  //gerer dans le main en cas d errreur -1 probleme dopen
   }
   size_t taille = sizeof(uint8_t);
-  uint8_t item[32];
+  uint8_t* ptr=(uint8_t*) malloc(taille*32);
   int read1=1;
   while(read1>0){
     for(int j=0;j<32;j++){
-      uint8_t byte;
-      read1 = read(fileReader,(void*)&byte,taille);
+      uint8_t bit
+      read1 = read(fileReader,(void*)&bit,taille);
       if(read1==-1){
         pthread_mutex_lock(&FiniMutex);  // section critique
         Fini++;
@@ -118,11 +117,11 @@ int producteur(char *fileName){
         pthread_mutex_unlock(&FiniMutex);
         return -4; // moins 32 bytes
       }
-    *(item+j)=byte;
+      *(ptr+j)=bit;
   }
   sem_wait(&empty);  // attente d'un slot libre
   pthread_mutex_lock(&mutex);  // section critique
-  insert_item(item);
+  insert_item(ptr);
   pthread_mutex_unlock(&mutex);
   sem_post(&full);  // il y a un slot rempli en plus
  }
