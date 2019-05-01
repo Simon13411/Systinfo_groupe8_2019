@@ -17,19 +17,24 @@
 int Fini =0;
 pthread_mutex_t mutex;
 pthread_mutex_t FiniMutex;
+pthread_mutex_t lettre;
 pthread_mutex_t place;
 sem_t empty;
+int consonne = 1;
 sem_t full;
 uint8_t tab[N]={};
 int nbfiles;
 int placetab=0;
-
-
+int maxmdp=0;
+struct node {
+    struct node *next;
+    char *name;
+};
+struct node **head;
 
 
 
 int main(int argc, char *argv[]) {
-  int consonne = 1;
   int maxThread = 1;
   char *files[argc];
   int testthread=0;
@@ -67,8 +72,6 @@ int main(int argc, char *argv[]) {
   }
   printf("longuer fichier = %d\n",nbfiles );
 
-
-
   pthread_mutex_init(&mutex, NULL);
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
@@ -92,17 +95,21 @@ int producteur(char *fileName){
     return -1;  //gerer dans le main en cas d errreur -1 probleme dopen
   }
   size_t taille = sizeof(uint8_t);
-  uint8_t* ptr=(uint8_t*) malloc(taille*32);
   int read1=1;
   while(read1>0){
+    uint8_t* ptr=(uint8_t*) malloc(taille*32);
+    if (ptr==NULL){
+      printf("ton malloc a fail \n");
+      return -5;//malloc fail
+    }
     for(int j=0;j<32;j++){
-      uint8_t bit
+      uint8_t bit;
       read1 = read(fileReader,(void*)&bit,taille);
       if(read1==-1){
         pthread_mutex_lock(&FiniMutex);  // section critique
         Fini++;
         pthread_mutex_unlock(&FiniMutex);
-        return -2; //gerer dans le main en cas d erreur -2 probleme de read
+        return -2; //probleme de read
       }
       if(read1==0){ // fin du fichier
         int fermer = close(fileReader);
@@ -110,7 +117,7 @@ int producteur(char *fileName){
           pthread_mutex_lock(&FiniMutex);  // section critique
           Fini++;
           pthread_mutex_unlock(&FiniMutex);
-          return -3; //gerer dans le main en cas d erreur -3 probleme de close
+          return -3; //probleme de close
         }
         pthread_mutex_lock(&FiniMutex);  // section critique
         Fini++;
@@ -121,7 +128,7 @@ int producteur(char *fileName){
   }
   sem_wait(&empty);  // attente d'un slot libre
   pthread_mutex_lock(&mutex);  // section critique
-  insert_item(ptr);
+  insert_item(*ptr);
   pthread_mutex_unlock(&mutex);
   sem_post(&full);  // il y a un slot rempli en plus
  }
@@ -146,20 +153,103 @@ uint8_t remplacer(){ // retire le dernier du buffer tab
   pthread_mutex_unlock(&place);
   return *(tab+placetab);
 }
+int nbconsvoy(char* mdp){
+  int count=0;
+  if (mdp==NULL){
+    return -8;
+  }
+  if (consonne==0){
+    int i=0;
+    while (*(mdp+i)!='\0') {
+      if (*(mdp+i)!='a' || *(mdp+i)!='e' || *(mdp+i)!='i' || *(mdp+i)!='o' || *(mdp+i)!='u' || *(mdp+i)!='y'){
+        count++;
+      }
+    }
+  }
+  else{
+    int i=0;
+    while (*(mdp+i)!='\0') {
+      if (*(mdp+i)=='a' || *(mdp+i)=='e' || *(mdp+i)=='i' || *(mdp+i)=='o' || *(mdp+i)=='u' || *(mdp+i)=='y'){
+        count++;
+      }
+    }
+  }
+return count;
+}
+
+
+int pop(struct node **head){
+  if (head==NULL){
+    return 1;
+  }
+  struct node *rm=(struct node*)malloc(sizeof(struct node));
+  if (rm==NULL){
+    return 2;
+  }
+  rm=*head;
+  *head=rm->next;
+  free(rm->name);
+  free(rm);
+  return 0;
+}
+
+int push(struct node **head, const char *value){
+  struct node *new=(struct node*)malloc(sizeof(struct node));
+  if (new==NULL){
+    return 1;
+  }
+  char* val=(char*)malloc(strlen(value)+1);
+  if (val==NULL){
+    free(new);
+    return 1;
+  }
+  if (head==NULL)
+    return 1;
+  new->next=*head;
+  *head= new;
+  new->name =strcpy(val,value);
+  return 0;
+}
 
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
-void consommateur(){
-  uint8_t item;
-  int nbFini;
+int consommateur(){
   pthread_mutex_lock(&FiniMutex);  // section critique
-  nbFini=Fini;
+  int Fin=Fini;
   pthread_mutex_unlock(&FiniMutex);
-  while(nbFini==nbfiles){
+  while (Fin!=nbfiles) {
     sem_wait(&full);// attente d'un slot rempli
     pthread_mutex_lock(&mutex);// section critique
-    item=remplacer();
+    const uint8_t *item=remplacer();
     pthread_mutex_unlock(&mutex);
     sem_post(&empty);// il y a un slot libre en plus
-
+    char* mdp=(char*) malloc(16);
+    if (mdp==NULL){
+      printf("ton malloc a fail en char \n");
+      return -6;//malloc fail
+    }
+    int boole;
+    boole=reversehash(item,mdp,16);
+    if (boole==0){
+      return -7;//reversehash fail
+    }
+    int nbconsvoye=nbconsvoy(mdp);
+    pthread_mutex_lock(&lettre);// section critique
+    if(maxmdp==nbconsvoye){
+      int good=push(head,mdp);
+      if(good!=0)
+        return -9;
+    }
+    if(maxmdp<nbconsvoye){
+      int good=0;
+      while (good!=2) {
+        good=pop(head);
+        if(good==1)
+          return -9;//head est NULL
+      }
+      int good2=push(head,mdp);
+      if(good2!=0)
+        return -9;
+    }
+    pthread_mutex_unlock(&lettre);
   }
 }
