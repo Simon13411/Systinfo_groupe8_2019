@@ -36,15 +36,12 @@ bool reversehash(const uint8_t *hash, char *res, size_t len)
 	unsigned int depth;
 	bool found;
 	char tmp[len+1];
-
 	for (depth = 1; depth <= len; depth++) {
 		found = __reversehash(hash, tmp, depth, 0, hashres);
 		if (found)
 			break;
 	}
-
 	if (found)
 		strncpy(res, tmp, len);
-
 	return found;
 }

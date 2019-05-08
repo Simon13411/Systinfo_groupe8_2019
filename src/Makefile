@@ -1,15 +1,7 @@
-
-T = -t 4
-C = -c 
-
-all: cracker
-
-cracker:main.o
-	gcc -o cracker main.o
-
-main.o:	main.c
-	gcc -o main.o -c main.c
-
-exemple1:
-	@./cracker $(T) $(C) ./LOL.txt ./pasexiste.txt
-
+cracker: main.c
+	gcc -o cracker main.c -lpthread -std=c99
+clean:
+	rm cracker
+tests: cracker 02_6c_5.bin
+	./cracker -c -t 4 02_6c_5.bin
+all: cracker tests
