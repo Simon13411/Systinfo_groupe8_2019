@@ -28,12 +28,13 @@ u_int8_t* tab[N]={};
 int nbfiles;
 int placetab=0;
 int maxmdp=0;
-struct node {
+typedef struct node {
     struct node *next;
     char *name;
-};
-struct node **head;//(struct node**)malloc(sizeof(struct node**));
+}node;
 
+node *head;
+//(struct node**)malloc(sizeof(struct node**));
 //Initialisation des diverse variale inter thread afin d eviter de les passer par des structure
 
 void insert_item(u_int8_t* ajout){  //ajout d un bloc de 32 bit dans le buffer tab
@@ -152,8 +153,8 @@ int push(struct node **head, const char *value){
     return 1;
   }
   if (head==NULL){
-    printf("head==NULL\n");
-    return 1;
+    new->name =strcpy(val,value);
+    *head=new;
   }
   new->next=*head;
   *head= new;
@@ -209,7 +210,7 @@ void* consommateur(){
     printf("maxmdp=%d\n",maxmdp);
     if(maxmdp==nbconsvoye){//rajoute a la stack
       printf("je push\n");
-      int good=push(head,mdp);
+      int good=push(&head,mdp);
       if(good!=0){
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
@@ -221,6 +222,7 @@ void* consommateur(){
     if (maxmdp==0){
       printf("je suis au début de la stack\n");
       push(head,mdp);
+      printf("%s\n",*head->name);
       maxmdp=nbconsvoye;
     }
     if(maxmdp<nbconsvoye){//retire tt puis on met dans la stack
@@ -228,12 +230,12 @@ void* consommateur(){
       int good=0;
       while (good!=1) {//retire tt de la stack
         printf("je boucle pop\n");
-        good=pop(head);
+        good=pop(&head);
         //if(good==1)
           //return ((void*)-10);//head est NULL
       }
       printf("je push apres pop\n");
-      int good2=push(head,mdp);//put ds la stack
+      int good2=push(&head,mdp);//put ds la stack
       if(good2!=0){
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
@@ -303,12 +305,11 @@ int main(int argc, char *argv[]) {
   if (err!=0){
     printf("mutex_lettre fail Initialisation\n");
   }
-
+  head=(node*)malloc(sizeof(node));
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
   producteur((void*)*(files+0));
   Fini=1;
-  printf("%d\n",tab[4] );
   pthread_t thread[maxThread];
   for(long i=0;i<maxThread;i++){
     err=pthread_create(&(thread[i]),NULL,&consommateur,(void*) 5);
@@ -348,7 +349,7 @@ int main(int argc, char *argv[]) {
     printf("errreur destroy sem full\n");
   }
   printf("juste avant la fin\n");
-  struct node *runner=*head;
+  struct node *runner=head;
   if (runner==NULL){
     printf("je suis null\n");
   }
