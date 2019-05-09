@@ -31,9 +31,35 @@ int maxmdp=0;
 typedef struct node {
     struct node *next;
     char *name;
-}node;
+    int nbcons;
+}node_t;
 
-node *head;
+node_t *init(char* nom,int voy){
+  printf("je suis ds init\n");
+  node_t* new=(node_t*)malloc(sizeof(node_t));
+  if(new==NULL){
+    return NULL;
+  }
+  char* val=(char*)malloc(strlen(nom)+1);
+  if (val==NULL){
+    free(new);
+    return NULL;
+  }
+  int *nb=(int*)malloc(sizeof(int));
+  if(nb==NULL){
+    free(new);
+    free(val);
+    return NULL;
+  }
+  *nb=voy;
+  printf("%d\n",*nb);
+  new->name=strcpy(val,nom);
+  new->nbcons=*nb;
+  new->next=NULL;
+  printf("nbcons =%d\n",new->nbcons );
+  printf("je sors\n");
+  return new;
+}
 //(struct node**)malloc(sizeof(struct node**));
 //Initialisation des diverse variale inter thread afin d eviter de les passer par des structure
 
@@ -123,49 +149,12 @@ return count;
 }
 
 
-int pop(struct node **head){
-  printf("je rentre dans pop\n");
-  if (head==NULL){
-    printf("head=NULL\n");
-    return 1;
-  }
-  struct node *rm=(struct node*)malloc(sizeof(struct node));
-  if (rm==NULL){
-    printf("malloc fail\n");
-    return 2;
-  }
-  rm=*head;
-  *head=rm->next;
-  free(rm->name);
-  free(rm);
-  printf("avant de l effacer\n");
-  return 0;
-}
-
-int push(struct node **head, const char *value){
-  struct node *new=(struct node*)malloc(sizeof(struct node));
-  if (new==NULL){
-    return 1;
-  }
-  char* val=(char*)malloc(strlen(value)+1);
-  if (val==NULL){
-    free(new);
-    return 1;
-  }
-  if (head==NULL){
-    new->name =strcpy(val,value);
-    *head=new;
-  }
-  new->next=*head;
-  *head= new;
-  new->name =strcpy(val,value);
-  return 0;
-}
 
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
-void* consommateur(){
+void* consommateur(void* param){
   int err;
   u_int8_t *item;
+  node_t *tete=(node_t*)param;
   printf("je suis un surconsommateur\n");
   pthread_mutex_lock(&place);  // section critique
   printf("avant while Fin = %d place = %d\n",Fini,placetab);
@@ -208,42 +197,29 @@ void* consommateur(){
       printf("mutex_lettre fail lock\n");
     }
     printf("maxmdp=%d\n",maxmdp);
-    if(maxmdp==nbconsvoye){//rajoute a la stack
-      printf("je push\n");
-      int good=push(&head,mdp);
-      if(good!=0){
+    if(maxmdp<=nbconsvoye){//rajoute a la stack
+      printf("il est egale maxmdp et nbconsvoye\n");
+      node_t *new=init(mdp,nbconsvoye);
+      if(new==NULL){
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
           printf("mutex_lettre fail lock\n");
         }
-        return ((void*)-9);//pas mis dans la stack
+        return ((void*)9);
       }
-    }
-    if (maxmdp==0){
-      printf("je suis au début de la stack\n");
-      push(head,mdp);
-      printf("%s\n",*head->name);
-      maxmdp=nbconsvoye;
-    }
-    if(maxmdp<nbconsvoye){//retire tt puis on met dans la stack
-      printf("je dois pop\n");
-      int good=0;
-      while (good!=1) {//retire tt de la stack
-        printf("je boucle pop\n");
-        good=pop(&head);
-        //if(good==1)
-          //return ((void*)-10);//head est NULL
-      }
-      printf("je push apres pop\n");
-      int good2=push(&head,mdp);//put ds la stack
-      if(good2!=0){
+      if (tete==NULL){
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
           printf("mutex_lettre fail lock\n");
         }
-        return ((void*)-11);//pas mis dans la stack
+        return ((void*)10);
       }
-      maxmdp=nbconsvoye;
+      printf("je me ds stack\n");
+      new->next=tete;
+      tete=new;
+      if(maxmdp<nbconsvoye){
+        maxmdp=nbconsvoye;
+      }
     }
     printf("j ai reussi a mettre ds stack\n");
     //printf("mdp=%s\n",*head->name);
@@ -305,14 +281,16 @@ int main(int argc, char *argv[]) {
   if (err!=0){
     printf("mutex_lettre fail Initialisation\n");
   }
-  head=(node*)malloc(sizeof(node));
+  node_t *head=(node_t*)malloc(sizeof(node_t));
+  head->next=NULL;
+  head->name=NULL;
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
   producteur((void*)*(files+0));
   Fini=1;
   pthread_t thread[maxThread];
   for(long i=0;i<maxThread;i++){
-    err=pthread_create(&(thread[i]),NULL,&consommateur,(void*) 5);
+    err=pthread_create(&(thread[i]),NULL,&consommateur,(void*) head);
     if(err!=0){
       printf("errreur create consommateur\n");
     }
@@ -348,15 +326,11 @@ int main(int argc, char *argv[]) {
   if(err!=0){
     printf("errreur destroy sem full\n");
   }
-  printf("juste avant la fin\n");
-  struct node *runner=head;
-  if (runner==NULL){
-    printf("je suis null\n");
+  printf("nb cons =%d\n",head->nbcons);
+  printf("name = %s\n",head->name );
+  while (maxmdp==head->nbcons) {
+    printf("mdp = %s\n",head->name);
+    head=head->next;
   }
-  while(runner!=NULL){
-  printf("je rentre ds runner\n");
-  printf("%s\n",runner->name);
-  runner=runner->next;
-}
-printf("aller zou\n");
+  printf("aller zou\n");
 }
