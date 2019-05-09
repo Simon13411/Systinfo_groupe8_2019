@@ -3,5 +3,5 @@ cracker: main.c
 clean:
 	rm cracker
 tests: cracker 02_6c_5.bin
-	./cracker -c -t 5 02_6c_5.bin
+	./cracker -t 5 02_6c_5.bin
 all: cracker tests

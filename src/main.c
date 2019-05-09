@@ -28,12 +28,13 @@ u_int8_t* tab[N]={};
 int nbfiles;
 int placetab=0;
 int maxmdp=0;
+
 typedef struct node {
     struct node *next;
     char *name;
     int nbcons;
 }node_t;
-
+node_t *head;
 node_t *init(char* nom,int voy){
   printf("je suis ds init\n");
   node_t* new=(node_t*)malloc(sizeof(node_t));
@@ -54,6 +55,7 @@ node_t *init(char* nom,int voy){
   *nb=voy;
   printf("%d\n",*nb);
   new->name=strcpy(val,nom);
+  printf("%s\n",new->name );
   new->nbcons=*nb;
   new->next=NULL;
   printf("nbcons =%d\n",new->nbcons );
@@ -151,11 +153,11 @@ return count;
 
 
 //il s'agit des thread qui vont prendre les 32 bytes et les décripter
-void* consommateur(void* param){
+void* consommateur(){
   int err;
   u_int8_t *item;
-  node_t *tete=(node_t*)param;
-  printf("je suis un surconsommateur\n");
+  //node_t *head=(node_t*)param;
+  //printf("%d\n",head->nbcons);
   pthread_mutex_lock(&place);  // section critique
   printf("avant while Fin = %d place = %d\n",Fini,placetab);
   while (Fini!=1 || placetab!=0) {// si place tab ==0 va poser pb avoir valeur d'un sem
@@ -172,17 +174,16 @@ void* consommateur(void* param){
       printf("mutex_mutex dans consommateur fail unlock\n");
     }
     sem_post(&empty);// il y a un slot libre en plus
-    printf("je suis dans la boucle avant place\n");
-    pthread_mutex_unlock(&place);
-    printf("je suis dans la boucle apre place\n");
-    printf("item = %d\n",*item );
+    err=pthread_mutex_unlock(&place);
+    if (err!=0){
+      printf("mutex_mutex dans place fail unlock\n");
+    }
     char* mdp=(char*) malloc(sizeof(char)*16);
     if (mdp==NULL){
       printf("ton malloc a fail en char \n");
       return ((void*)-7);//malloc fail
     }
     bool boole;
-    printf("avant reversehash\n");
     boole=reversehash(item,mdp,sizeof(char)*16);
     free(item);
     if (!boole){
@@ -207,7 +208,7 @@ void* consommateur(void* param){
         }
         return ((void*)9);
       }
-      if (tete==NULL){
+      if (head==NULL){
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
           printf("mutex_lettre fail lock\n");
@@ -215,8 +216,10 @@ void* consommateur(void* param){
         return ((void*)10);
       }
       printf("je me ds stack\n");
-      new->next=tete;
-      tete=new;
+      printf("new name %s\n",new->name);
+      new->next=head;
+      head=new;
+      printf("head name %s\n",head->name);
       if(maxmdp<nbconsvoye){
         maxmdp=nbconsvoye;
       }
@@ -281,22 +284,22 @@ int main(int argc, char *argv[]) {
   if (err!=0){
     printf("mutex_lettre fail Initialisation\n");
   }
-  node_t *head=(node_t*)malloc(sizeof(node_t));
+  head=(node_t*)malloc(sizeof(node_t));
   head->next=NULL;
   head->name=NULL;
+  head->nbcons=0;
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
   producteur((void*)*(files+0));
   Fini=1;
   pthread_t thread[maxThread];
   for(long i=0;i<maxThread;i++){
-    err=pthread_create(&(thread[i]),NULL,&consommateur,(void*) head);
+    err=pthread_create(&(thread[i]),NULL,&consommateur,NULL);
     if(err!=0){
       printf("errreur create consommateur\n");
     }
   }
   printf("j'ai cree pthread\n");
-
 
   for(long i=0;i<maxThread;i++){
     err=pthread_join(thread[i],NULL);
@@ -326,11 +329,13 @@ int main(int argc, char *argv[]) {
   if(err!=0){
     printf("errreur destroy sem full\n");
   }
+  node_t *runner=head;
   printf("nb cons =%d\n",head->nbcons);
   printf("name = %s\n",head->name );
-  while (maxmdp==head->nbcons) {
-    printf("mdp = %s\n",head->name);
-    head=head->next;
+  while (runner->nbcons==maxmdp) {
+    printf("je suis ds while\n");
+    printf("mdp = %s\n",runner->name);
+    runner=runner->next;
   }
   printf("aller zou\n");
 }
