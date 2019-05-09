@@ -14,7 +14,7 @@
 #include "sha256.c"
 #include "reverse.c"
 // Initialisation
-#define N 10 // slots du buffer
+#define N 100 // slots du buffer
 #define cons "-c"
 #define nbthread "-t"
 int Fini =0;
@@ -36,7 +36,6 @@ typedef struct node {
 }node_t;
 node_t *head;
 node_t *init(char* nom,int voy){
-  printf("je suis ds init\n");
   node_t* new=(node_t*)malloc(sizeof(node_t));
   if(new==NULL){
     return NULL;
@@ -53,13 +52,9 @@ node_t *init(char* nom,int voy){
     return NULL;
   }
   *nb=voy;
-  printf("%d\n",*nb);
   new->name=strcpy(val,nom);
-  printf("%s\n",new->name );
   new->nbcons=*nb;
   new->next=NULL;
-  printf("nbcons =%d\n",new->nbcons );
-  printf("je sors\n");
   return new;
 }
 //(struct node**)malloc(sizeof(struct node**));
@@ -83,9 +78,10 @@ void insert_item(u_int8_t* ajout){  //ajout d un bloc de 32 bit dans le buffer t
 void* producteur(void* nomfile){
   int err;
   char* fileName= (char*) nomfile;
+  printf("%s\n",fileName );
   int fileReader =open(fileName,O_RDONLY);
   if(fileReader==-1){
-    printf("pas open\n");
+    printf("pas open file fileName= %s\n",fileName);
     return ((void*)-1);  //gerer dans le main en cas d errreur -1 probleme dopen
   }
   size_t taille = sizeof(u_int8_t);
@@ -138,7 +134,6 @@ int nbconsvoy(char* mdp){
   }
     int i=0;
     while (*(mdp+i)!='\0') {
-      printf("count = %d\n",count);
       if (*(mdp+i)=='a' || *(mdp+i)=='e' || *(mdp+i)=='i' || *(mdp+i)=='o' || *(mdp+i)=='u' || *(mdp+i)=='y'){
         count++;
       }
@@ -158,25 +153,26 @@ void* consommateur(){
   u_int8_t *item;
   //node_t *head=(node_t*)param;
   //printf("%d\n",head->nbcons);
+  sem_wait(&full);// attente d'un slot rempli
+  err=pthread_mutex_lock(&mutex);// section critique
+  if (err!=0){
+    printf("mutex_mutex dans consommateur fail lock\n");
+  }
   pthread_mutex_lock(&place);  // section critique
-  printf("avant while Fin = %d place = %d\n",Fini,placetab);
   while (Fini!=1 || placetab!=0) {// si place tab ==0 va poser pb avoir valeur d'un sem
-    placetab--;
-    sem_wait(&full);// attente d'un slot rempli
-    err=pthread_mutex_lock(&mutex);// section critique
-    if (err!=0){
-      printf("mutex_mutex dans consommateur fail lock\n");
-    }
-    item=tab[placetab];
 
+    placetab--;
+    item=tab[placetab];
+    err=pthread_mutex_unlock(&place);
+    if (err!=0){
+      printf("mutex_mutex dans place fail unlock\n");
+    }
     err=pthread_mutex_unlock(&mutex);
     if (err!=0){
       printf("mutex_mutex dans consommateur fail unlock\n");
     }
-    sem_post(&empty);// il y a un slot libre en plus
-    err=pthread_mutex_unlock(&place);
-    if (err!=0){
-      printf("mutex_mutex dans place fail unlock\n");
+    if (Fini!=1){
+      sem_post(&empty);// il y a un slot libre en plus
     }
     char* mdp=(char*) malloc(sizeof(char)*16);
     if (mdp==NULL){
@@ -190,14 +186,11 @@ void* consommateur(){
       printf("reversehash fail\n");
       return ((void*)-8);//reversehash fail
     }
-    printf("apres reversehash mdp = %s\n",mdp);
     int nbconsvoye=nbconsvoy(mdp);
-    printf("nb nbconsvoye = %d\n",nbconsvoye);
     err=pthread_mutex_lock(&lettre);// section critique de mise en stack
     if (err!=0){
       printf("mutex_lettre fail lock\n");
     }
-    printf("maxmdp=%d\n",maxmdp);
     if(maxmdp<=nbconsvoye){//rajoute a la stack
       printf("il est egale maxmdp et nbconsvoye\n");
       node_t *new=init(mdp,nbconsvoye);
@@ -215,62 +208,71 @@ void* consommateur(){
         }
         return ((void*)10);
       }
-      printf("je me ds stack\n");
-      printf("new name %s\n",new->name);
       new->next=head;
       head=new;
-      printf("head name %s\n",head->name);
       if(maxmdp<nbconsvoye){
         maxmdp=nbconsvoye;
       }
     }
-    printf("j ai reussi a mettre ds stack\n");
     //printf("mdp=%s\n",*head->name);
     free(mdp);
-    printf("j ai fris mdp\n");
     pthread_mutex_unlock(&lettre);//on libere la stack
     if (err!=0){
       printf("mutex_lettre fail lock\n");
     }
+    if(Fini!=1){
+      sem_wait(&full);// attente d'un slot rempli
+    }
+    err=pthread_mutex_lock(&mutex);// section critique
+    if (err!=0){
+      printf("mutex_mutex dans consommateur fail lock\n");
+    }
     pthread_mutex_lock(&place);  // section critique
-    printf("Fin de boucle Fin = %d place = %d\n",Fini,placetab);
   }
   pthread_mutex_unlock(&place);
+  err=pthread_mutex_unlock(&mutex);
+  if (err!=0){
+    printf("mutex_mutex dans consommateur fail unlock\n");
+  }
+  //sem_post(&empty);// il y a un slot libre en plus
   return (void*)0;
 }
+
+
+
+
+
+
+
+
 
 
 int main(int argc, char *argv[]) {
   int maxThread = 1;
   int err;
+  int j=0;
   char *files[argc];
   nbfiles = argc-1; //car les arg contienne nom fichier donc -1 pour le nom
   for(int i=1;i<argc; i++){
-    printf("i=%d\n",i);
     if(strcmp(*(argv+i),cons)==0){  //regarde si on demande de verifier pour les consonnes(==true) ou les voyelle(==false)
       consonne = 0;
       nbfiles--;
     }
     else if(strcmp(*(argv+i),nbthread)==0){  //regarde le nombre de threads utilise
       i++;
-      if ((atoi(*(argv+i)))>1){
-        nbfiles--;
-        maxThread = atoi(*(argv+i));
-        printf("nombre de threads = %d\n", maxThread);
-      }
-      printf("thread<1\n");
       nbfiles--;
+      nbfiles--;
+      if ((atoi(*(argv+i)))>1){
+        maxThread = atoi(*(argv+i));
+      }
     }//si pas -c ou -t alors c'est un fichier
     else{ //ecrit dans un tableau le nom des fichiers
-      int j=0;
       *(files+j) = *(argv+i);
       printf("nom du fichier %s\n",*(files+j));
       j++;
     }
   }
-  if (consonne==0){
-    printf("contient consonne\n");
-  }
+
   printf("nb de fichier = %d\n",nbfiles);
   err=pthread_mutex_init(&mutex, NULL);
   if (err!=0){
@@ -290,8 +292,14 @@ int main(int argc, char *argv[]) {
   head->nbcons=0;
   sem_init(&empty,0,N); // buffer vide
   sem_init(&full,0,0);  // buffer vide
-  producteur((void*)*(files+0));
-  Fini=1;
+  pthread_t threadfil[nbfiles];
+  for(long i=0;i<nbfiles;i++){
+    err=pthread_create(&(threadfil[i]),NULL,&producteur,(void*)files[i]);
+    if(err!=0){
+      printf("errreur create producteur\n");
+    }
+  }
+  //producteur((void*)*(files+0));
   pthread_t thread[maxThread];
   for(long i=0;i<maxThread;i++){
     err=pthread_create(&(thread[i]),NULL,&consommateur,NULL);
@@ -301,6 +309,13 @@ int main(int argc, char *argv[]) {
   }
   printf("j'ai cree pthread\n");
 
+  for(long i=0;i<nbfiles;i++){
+    err=pthread_join(threadfil[i],NULL);
+    if(err!=0){
+      printf("errreur pthread_join consommateur\n");
+    }
+  }
+  Fini=1;
   for(long i=0;i<maxThread;i++){
     err=pthread_join(thread[i],NULL);
     if(err!=0){
@@ -330,12 +345,8 @@ int main(int argc, char *argv[]) {
     printf("errreur destroy sem full\n");
   }
   node_t *runner=head;
-  printf("nb cons =%d\n",head->nbcons);
-  printf("name = %s\n",head->name );
   while (runner->nbcons==maxmdp) {
-    printf("je suis ds while\n");
     printf("mdp = %s\n",runner->name);
     runner=runner->next;
   }
-  printf("aller zou\n");
 }
