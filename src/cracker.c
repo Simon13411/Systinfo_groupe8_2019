@@ -201,6 +201,9 @@ void* consommateur(){
         return ((void*)9);
       }
       if (head==NULL){
+        //free(new->nbcons);
+        free(new->name);
+        free(new);
         pthread_mutex_unlock(&lettre);//on libere la stack
         if (err!=0){
           printf("mutex_lettre fail lock\n");
@@ -364,5 +367,13 @@ int main(int argc, char *argv[]) {
     if(fermer==-1){
       printf("Erreur de fermeture\n");
     }
+  }
+  node_t *run=head;
+  while (head!=NULL){
+    run=head;
+    head=run->next;
+    free(run->name);
+    //free(run->nbcons);
+    free(run);
   }
 }
