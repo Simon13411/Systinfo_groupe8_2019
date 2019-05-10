@@ -8,7 +8,7 @@ tests: tests1 tests2 tests2 tests3 tests4
 tests1: cracker tests/02_6c_5.bin tests/01_4c_1k.bin
 	./cracker -t 100 tests/02_6c_5.bin tests/01_4c_1k.bin
 tests2: cracker tests/02_6c_5.bin 
-	./cracker -t 5 tests/02_6c_5.bin
+	./cracker -t 4 tests/02_6c_5.bin
 tests3: cracker tests/01_4c_1k.bin
 	./cracker -t 100  -c tests/01_4c_1k.bin
 tests4: cracker tests/01_4c_1k.bin
