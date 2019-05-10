@@ -191,7 +191,6 @@ void* consommateur(){
       printf("mutex_lettre fail lock\n");
     }
     if(maxmdp<=nbconsvoye){//rajoute a la stack suelement si il y a autant ou plus de consonne ou voyelle
-      printf("il est egale maxmdp et nbconsvoye\n");
       node_t *new=init(mdp,nbconsvoye);//creation du node
       if(new==NULL){
         pthread_mutex_unlock(&lettre);//on libere la stack
