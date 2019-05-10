@@ -22,7 +22,6 @@ int Fini =0;//indique si tout les fichier ont ete lu
 int consonne = 1;
 pthread_mutex_t mutex;//protege le buffer
 pthread_mutex_t lettre;//protege stack de fin
-pthread_mutex_t place;//protege la place dans le buffer
 sem_t empty;
 sem_t full; //2 sem pour le probleme producteur consommateur
 u_int8_t* tab[N]={};//notre buffer
@@ -63,17 +62,8 @@ node_t *init(char* nom,int voy){//creation d un noeud de la chaine
 //Initialisation des diverse variale inter thread afin d eviter de les passer par des structure
 
 void insert_item(u_int8_t* ajout){  //ajout d un bloc de 32 bit dans le buffer tab
-  int err;
-  err=pthread_mutex_lock(&place); //on protege la place dans le tableau
-  if (err!=0){
-    printf("mutex_place de insert_item fail lock\n");
-  }
-  tab[placetab]=ajout;//!!! le tableau est protege dans producteur on peut seulement l appele quand
-  placetab++;// un mutex protege le tableau egalement
-  err=pthread_mutex_unlock(&place);
-  if (err!=0){
-    printf("mutex_place de insert_item fail unlock\n");
-  }
+  tab[placetab]=ajout;
+  placetab++;
 }
 //lit un des fichiers donné en arguments et les sépare en groupe de 32 bytes
 //qu il met dans le buffer de taille "N"
@@ -158,14 +148,9 @@ void* consommateur(){
   if (err!=0){
     printf("mutex_mutex dans consommateur fail lock\n");
   }
-  pthread_mutex_lock(&place);  // section critique
   while (Fini!=1 || placetab!=0) {// si place tab ==0 va poser pb avoir valeur d'un sem
     placetab--;
     item=tab[placetab];
-    err=pthread_mutex_unlock(&place);
-    if (err!=0){
-      printf("mutex_mutex dans place fail unlock\n");
-    }
     err=pthread_mutex_unlock(&mutex);
     if (err!=0){
       printf("mutex_mutex dans consommateur fail unlock\n");
@@ -228,10 +213,8 @@ void* consommateur(){
     if (err!=0){
       printf("mutex_mutex dans consommateur fail lock\n");
     }
-    pthread_mutex_lock(&place);//section critique on lock en fin de boucle pour verifer
     //les condition du while
   }
-  pthread_mutex_unlock(&place);
   err=pthread_mutex_unlock(&mutex);//on unlock les mutex si les condition ont ete verifer
   if (err!=0){
     printf("mutex_mutex dans consommateur fail unlock\n");
@@ -276,10 +259,6 @@ int main(int argc, char *argv[]) {
   if (err!=0){
     printf("mutex_mutex fail Initialisation\n");
   }
-  err=pthread_mutex_init(&place, NULL);
-  if (err!=0){
-    printf("mutex_place fail Initialisation\n");
-  }
   err=pthread_mutex_init(&lettre, NULL);
   if (err!=0){
     printf("mutex_lettre fail Initialisation\n");
@@ -323,10 +302,7 @@ int main(int argc, char *argv[]) {
   if(err!=0){
     printf("errreur destroy mutex\n");
   }  //!!!!!!!!!!! on doit détruire mutex et semaphore
-  err=pthread_mutex_destroy(&place);
-  if(err!=0){
-    printf("errreur destroy place\n");
-  }
+
   err=pthread_mutex_destroy(&lettre);
   if(err!=0){
     printf("errreur destroy lettre\n");
