@@ -17,6 +17,7 @@
 #define N 100 // slots du buffer
 #define cons "-c"
 #define nbthread "-t"
+#define output "-o"
 int Fini =0;
 pthread_mutex_t mutex;
 pthread_mutex_t lettre;
@@ -28,6 +29,8 @@ u_int8_t* tab[N]={};
 int nbfiles;
 int placetab=0;
 int maxmdp=0;
+int out=0;
+char *fileOutput;
 
 typedef struct node {
     struct node *next;
@@ -265,6 +268,12 @@ int main(int argc, char *argv[]) {
       if ((atoi(*(argv+i)))>1){
         maxThread = atoi(*(argv+i));
       }
+    }
+    else if(strcmp(*(argv+i), output)==0){
+      out=1;
+      i++;
+      fileOutput = *(argv+i);
+      nbfiles=nbfiles-2;
     }//si pas -c ou -t alors c'est un fichier
     else{ //ecrit dans un tableau le nom des fichiers
       *(files+j) = *(argv+i);
@@ -345,8 +354,30 @@ int main(int argc, char *argv[]) {
     printf("errreur destroy sem full\n");
   }
   node_t *runner=head;
+  int openfile=0;
+  if(out==1){
+    openfile = open(fileOutput, O_WRONLY | O_CREAT| O_TRUNC,S_IRWXU);
+    if(openfile==-1){
+      printf("pas reussi a aller dans le ficheir\n");
+    }
+  }
   while (runner->nbcons==maxmdp) {
-    printf("mdp = %s\n",runner->name);
-    runner=runner->next;
+    if(out!=1){
+      printf("mdp = %s\n",runner->name);
+    }
+    else{
+      char * str = strcat((char *) runner->name, "\n");
+      write(openfile,str, strlen(runner->name));
+        /*if(writefile==-1){
+          printf("Erreur d ecriture dans file\n");
+        }*/
+    }
+      runner=runner->next;
+  }
+  if(out==1){
+    int fermer = close(openfile);
+    if(fermer==-1){
+      printf("Erreur de fermeture\n");
+    }
   }
 }
